@@ -30,6 +30,8 @@
 #define PLAYER_CHARACTER 8
 #define SPACE_CHARACTER 0
 #define MAZE_CHARACTER 128
+#define SCREEN_WIDTH 9
+#define SCREEN_HEIGHT 18
 
 ; character set definition/helpers
 __:				EQU	$00	;spacja
@@ -133,6 +135,10 @@ Line1:          DEFB $00,$0a                    ; Line 10
                 DEFW Line1End-Line1Text         ; Line 10 length
 Line1Text:      DEFB $ea                        ; REM
                                                                 
+                                                                
+PRINT			EQU $10
+PRINTAT			EQU $08F5
+                                                                
 initVariables
 	ld bc,3
 	ld de,gameName
@@ -141,7 +147,7 @@ initVariables
     ld bc,56
 	ld de,blankText
 	call printstring
-
+    
     ;; some variable initialisation
     ld hl, (DF_CC)
     ld de, 11
@@ -151,9 +157,18 @@ initVariables
     ld a, PLAYER_CHARACTER
     ld hl, (playerPosAbsolute)
     ld (hl), a
-    xor a ; zero a
+    
+    ld a, 1
     ld (playerRowPosition), a
+    xor a
     ld (playerColPosition), a
+
+    ld bc, $ffff
+mazeInitLoop    
+    push bc
+    call initialiseMaze
+    pop bc
+    djnz mazeInitLoop
     
 gameLoop
 
@@ -191,7 +206,7 @@ afterCheckLeft
     
 drawRight    
     ld a, (playerColPosition) 
-    cp 9
+    cp SCREEN_WIDTH
     jp z, afterCheckRight
     inc a
     ld (playerColPosition), a
@@ -275,6 +290,46 @@ playerWon
     call waitLoop    
     jp initVariables
     ;; never gets to here
+    
+    
+initialiseMaze    
+
+tryAnotherRCol                          ; generate random number for col
+    ld a, r                             
+    and %00011101
+    cp SCREEN_WIDTH    
+    jp nc, tryAnotherRCol               ; loop when nc flag set ie not less than SCREEN_WIDTH try again    
+    ld (setRandomMazeCOL), a
+    
+tryAnotherRRow                          ; generate random number for row
+    ld a, r                             
+    and %00011101
+    cp SCREEN_HEIGHT    
+    jp nc, tryAnotherRRow               ; loop when nc flag set ie not less than 5 try again    
+    inc a                               ; inc guarntees range 1 to 21 for row     
+    ld (setRandomMazeROW), a
+    
+    ld a, (setRandomMazeROW)   
+	ld h, a				    ; row set for PRINTAT
+    ld a, (setRandomMazeCOL)
+    ld l, a				    ; column set for PRINTAT
+    
+    push hl  ; push hl to get into bc via the pop, why is ld bc, hl not an instruction? who am I to question :)
+    pop bc
+
+        
+    push hl   ; save registers thinking is it's the bug that drops print at down one
+    push de
+    push af    
+    call PRINTAT		; ROM routine to set current cursor position, from row b and column c    
+    pop af
+    pop de
+    pop hl 
+    
+    ld a, MAZE_CHARACTER
+    call PRINT 
+   
+    ret
   
     
 waitLoop
@@ -365,6 +420,10 @@ firstCharFirstRow
     DEFB 0,0
 lastCharFirstRow    
     DEFB 0,0
+setRandomMazeROW
+    DEFB 0
+setRandomMazeCOL    
+    DEFB 0
 VariablesEnd:   DEFB $80
 BasicEnd: 
 #END
