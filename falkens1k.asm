@@ -129,21 +129,14 @@ S_POSN:         DEFW $1821
 CDFLAG:         DEFB $40
 PRBUFF:         DEFB 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,$76 ; 32 Spaces + Newline
 MEMBOT:         DEFB 0,0,0,0,0,0,0,0,0,0,$84,$20,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 ; 30 zeros
+;MEMBOT:         DEFB 0,0 ;  zeros
 UNUNSED2:       DEFW 0
 
 Line1:          DEFB $00,$0a                    ; Line 10
                 DEFW Line1End-Line1Text         ; Line 10 length
 Line1Text:      DEFB $ea                        ; REM
-                                                                
-                                                                
-PRINT			EQU $10
-PRINTAT			EQU $08F5
-                                                                
+              
 initVariables
-	ld bc,3
-	ld de,gameName
-	call printstring
-    
     ld bc,56
 	ld de,blankText
 	call printstring
@@ -162,15 +155,16 @@ initVariables
     ld (playerRowPosition), a
     xor a
     ld (playerColPosition), a
-
-    ld bc, $ffff
-mazeInitLoop    
-    push bc
-    call initialiseMaze
-    pop bc
-    djnz mazeInitLoop
     
-gameLoop
+    call initialiseMaze
+    
+    ld a, 0
+    ld (firstTime), a
+    
+gameLoop    
+    ld a, (firstTime)
+    cp 1
+    jp z, initVariables
 
     ;; read keys
     ld a, KEYBOARD_READ_PORT_SHIFT_TO_V			
@@ -261,14 +255,17 @@ hitGameOver
 	ld bc,56
 	ld de,youLostText
     call printstring
+    
+#ifdef RUN_ON_EMULATOR
+    ld e, 20 
+#else
+    ld e, 15 
+#endif        
+    
+waitPlayerOver           
     call waitLoop   
-    call waitLoop
-    call waitLoop
-    call waitLoop
-    call waitLoop   
-    call waitLoop
-    call waitLoop
-    call waitLoop    
+    dec e
+    jp nz, waitPlayerOver
     jp initVariables
     ;; never gets to here
    
@@ -279,56 +276,67 @@ playerWon
 
 	ld bc,56
 	ld de,youWonText
-	call printstring    
+	call printstring   
+    
+#ifdef RUN_ON_EMULATOR
+    ld e, 20 
+#else
+    ld e, 15 
+#endif   
+waitPlayerWon     
     call waitLoop   
-    call waitLoop
-    call waitLoop
-    call waitLoop
-    call waitLoop   
-    call waitLoop
-    call waitLoop
-    call waitLoop    
+    dec e
+    jp nz, waitPlayerWon
+    
     jp initVariables
     ;; never gets to here
     
     
 initialiseMaze    
 
-tryAnotherRCol                          ; generate random number for col
-    ld a, r                             
-    and %00011101
-    cp SCREEN_WIDTH    
-    jp nc, tryAnotherRCol               ; loop when nc flag set ie not less than SCREEN_WIDTH try again    
-    ld (setRandomMazeCOL), a
+    ld hl, (DF_CC)
+    ld de, 22
+    add hl, de
     
-tryAnotherRRow                          ; generate random number for row
-    ld a, r                             
-    and %00011101
-    cp SCREEN_HEIGHT    
-    jp nc, tryAnotherRRow               ; loop when nc flag set ie not less than 5 try again    
-    inc a                               ; inc guarntees range 1 to 21 for row     
-    ld (setRandomMazeROW), a
+    ld b, 19    ;; loop for 20 rows
     
-    ld a, (setRandomMazeROW)   
-	ld h, a				    ; row set for PRINTAT
-    ld a, (setRandomMazeCOL)
-    ld l, a				    ; column set for PRINTAT
+loopForRowsMazeInit                          ; generate random number for col    
+    push bc
+    ld b, 10
+loopForColMazeInit
+    push bc
+    ld b, 3
+    call rnd    
+    cp 1
+    jp z, addBlock
     
-    push hl  ; push hl to get into bc via the pop, why is ld bc, hl not an instruction? who am I to question :)
-    pop bc
-
-        
-    push hl   ; save registers thinking is it's the bug that drops print at down one
-    push de
-    push af    
-    call PRINTAT		; ROM routine to set current cursor position, from row b and column c    
-    pop af
-    pop de
-    pop hl 
-    
+    cp 2
+    jp z, clearBlock    
+    cp 3
+    jp z, clearBlock        
+    jp nextInnerLoopMazeInit
+clearBlock    
+    ld a, 0         ; clear block
+    ld (hl), a
+    jp nextInnerLoopMazeInit
+addBlock
     ld a, MAZE_CHARACTER
-    call PRINT 
-   
+    ld (hl), a
+nextInnerLoopMazeInit
+    inc hl
+    
+    pop bc
+    djnz loopForColMazeInit
+    
+    inc hl      ; this extra inc to get past the end of line
+       
+    pop bc
+    
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    
+    
+    djnz loopForRowsMazeInit
+       
     ret
   
     
@@ -359,6 +367,31 @@ printstring_loop
     jr printstring_loop
 printstring_end	
     ret  
+
+;;;adapted from file:///C:/Users/computer/Downloads/Game_52%20Weedkiller%20(4).pdf
+rnd     
+    push hl
+    push bc
+    push de
+    ld hl,(FRAMES) 
+rseed 
+    ld de,0
+    add hl,de
+    dec hl
+    ld a,h
+    and $1f
+    ld h,a
+    ld (rseed+1),hl
+    ld a,(hl)
+frnd 
+    sub b
+    jr nc,frnd
+    adc a,b  
+    pop de
+    pop bc
+    pop hl
+    ret 
+
     
                 DEFB $76                        ; Newline        
 Line1End
@@ -373,7 +406,7 @@ Line2End
 endBasic
                                                                 
 Display        	DEFB $76     
-                DEFB 8,9,0,0,0,0,0,0,9,8,$76 ; Line 0
+                DEFB 8,9,_F,_A,_L,_K,_E,_N,9,8,$76 ; Line 0
                 DEFB 0,0,0,0,0,0,0,0,0,0,$76 ; Line 1
                 DEFB 0,0,0,0,0,0,0,0,0,0,$76 ; Line 2                                
                 DEFB 0,0,0,0,0,0,0,0,0,0,$76 ; Line 3
@@ -400,8 +433,6 @@ Display        	DEFB $76
                                  
                                                                 
 Variables:      
-gameName
-	DEFB	_F,_A,_L,_K,_E,_N,$ff
 youWonText    
     DEFB	_Y,_O,_U,__,_W,_O,_N,$ff
 youLostText    
@@ -409,6 +440,8 @@ youLostText
 blankText    
     DEFB	__,__,__,__,__,__,__,__,$ff    
 tempChar
+    DEFB 0
+mazeDrawAbasolute    
     DEFB 0
 playerPosAbsolute
     DEFB 0,0
@@ -420,10 +453,8 @@ firstCharFirstRow
     DEFB 0,0
 lastCharFirstRow    
     DEFB 0,0
-setRandomMazeROW
-    DEFB 0
-setRandomMazeCOL    
-    DEFB 0
+firstTime    
+    DEFB 1
 VariablesEnd:   DEFB $80
 BasicEnd: 
 #END
