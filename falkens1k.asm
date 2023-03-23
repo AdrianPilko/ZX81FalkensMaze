@@ -15,7 +15,7 @@
 ;; at least on my PAL TV zx81, it runs slower on real zx81, so comment in this #defines to 
 ;; alter delay timings
 
-;#define RUN_ON_EMULATOR
+#define RUN_ON_EMULATOR
 
 
 ;;;;;#define DEBUG_NO_SCROLL
@@ -27,7 +27,7 @@
 ; starting port numbner for keyboard, is same as first port for shift to v
 #define KEYBOARD_READ_PORT $FE 
 
-#define PLAYER_CHARACTER 8
+#define PLAYER_CHARACTER 187
 #define SPACE_CHARACTER 0
 #define MAZE_CHARACTER 128
 #define SCREEN_WIDTH 9
@@ -127,8 +127,6 @@ COORDS:         DEFW 0
 PR_CC:          DEFB $bc
 S_POSN:         DEFW $1821
 CDFLAG:         DEFB $40
-;PRBUFF:         DEFB 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,$76 ; 32 Spaces + Newline
-;MEMBOT:         DEFB 0,0,0,0,0,0,0,0,0,0,$84,$20,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 ; 30 zeros
 MEMBOT:         DEFB 0,0 ;  zeros
 UNUNSED2:       DEFW 0
 
@@ -139,6 +137,8 @@ Line1Text:      DEFB $ea                        ; REM
 firstTimeInit
     ld a, 1
     ld (Score), a    
+    ld a, 9
+    ld (BombsLeft), a
 initVariables
     ld bc,56
 	ld de,blankText
@@ -189,6 +189,12 @@ gameLoop
     in a, (KEYBOARD_READ_PORT)					; read from io port		
     bit 3, a					        ; N
     jp z, drawDown
+
+    ld a, KEYBOARD_READ_PORT_SPACE_TO_B			
+    in a, (KEYBOARD_READ_PORT)					; read from io port		
+    bit 4, a					        ; B - drop bomb
+    jp z, dropBomb
+
     
     jp checkCollision
     
@@ -233,6 +239,27 @@ drawDown
     daa 
     ld (Score),a 
     jp checkCollision
+dropBomb
+    ld a, (BombsLeft)
+    cp 0
+    jp z, checkCollision
+    xor a
+    ld hl, (playerPosAbsolute)
+    push hl    
+    inc hl    
+    ld (hl), a
+    pop hl
+    dec hl
+    ld (hl), a
+    
+    ld a, (BombsLeft)
+    dec a
+    daa
+    ld (BombsLeft), a
+    call waitLoop
+    
+    jp checkCollision
+
 
 checkCollision
     scf
@@ -245,12 +272,13 @@ checkCollision
     jp z, playerWon    
     
     ld hl, (DF_CC)
-    ;ld de, 237
     ld de, 248
     add hl, de  
+    push hl    ; store
+    
     ld a, (Score)
     
-
+    ;;;;;;;;;;; print score
     push af ;store the original value of a for later
     and $f0 ; isolate the first digit
     rra
@@ -261,6 +289,15 @@ checkCollision
     ld (hl), a
     inc hl
     pop af ; retrieve original value of a
+    and $0f ; isolate the second digit
+    add a,$1c ; add 28 to the character code
+    ld (hl), a      
+
+    pop hl     
+    ld de, 10
+    add hl, de  
+
+    ld a, (BombsLeft)    
     and $0f ; isolate the second digit
     add a,$1c ; add 28 to the character code
     ld (hl), a      
@@ -289,8 +326,10 @@ hitGameOver
 	ld bc,57
 	ld de,youLostText    
     call printstring
-    ld a, 1
+    ld a, 1                 ;; reset score
     ld (Score), a   
+    ld a, 9                 ;; reset bomb counter
+    ld (BombsLeft), a    
     
 #ifdef RUN_ON_EMULATOR
     ld e, 20 
@@ -440,9 +479,9 @@ nextInnerLoopMazeInit
     
 waitLoop
 #ifdef RUN_ON_EMULATOR
-    ld bc, $1fff     ; set wait loop delay for emulator
+    ld bc, $0fff     ; set wait loop delay for emulator
 #else
-    ld bc, $0fff     ; set wait loop delay 
+    ld bc, $0eff     ; set wait loop delay 
 #endif    
 waitloop1
     dec bc
@@ -527,7 +566,7 @@ Display        	DEFB $76
                 DEFB 0,0,0,0,0,0,0,0,0,0,$76 ; Line 20
                 DEFB 9,9,9,9,0,0,9,9,9,9,$76  ; Line 21
                 DEFB _S,_C,_O,_R,_E,0,0,0,$76  ; Line 22
-                DEFB $76 ; Line 23
+                DEFB _B,_O,_M,_B,_S,0,0,0,$76  ; Line 23 ; we can only print here because we're doing it manually               
                                  
                                                                 
 Variables:      
@@ -554,6 +593,8 @@ lastCharFirstRow
 firstTime    
     DEFB 1
 Score    
+    DEFB 0
+BombsLeft
     DEFB 0
 VariablesEnd:   DEFB $80
 BasicEnd: 
