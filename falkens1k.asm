@@ -127,15 +127,18 @@ COORDS:         DEFW 0
 PR_CC:          DEFB $bc
 S_POSN:         DEFW $1821
 CDFLAG:         DEFB $40
-PRBUFF:         DEFB 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,$76 ; 32 Spaces + Newline
-MEMBOT:         DEFB 0,0,0,0,0,0,0,0,0,0,$84,$20,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 ; 30 zeros
-;MEMBOT:         DEFB 0,0 ;  zeros
+;PRBUFF:         DEFB 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,$76 ; 32 Spaces + Newline
+;MEMBOT:         DEFB 0,0,0,0,0,0,0,0,0,0,$84,$20,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 ; 30 zeros
+MEMBOT:         DEFB 0,0 ;  zeros
 UNUNSED2:       DEFW 0
 
 Line1:          DEFB $00,$0a                    ; Line 10
                 DEFW Line1End-Line1Text         ; Line 10 length
 Line1Text:      DEFB $ea                        ; REM
-              
+    
+firstTimeInit
+    ld a, 1
+    ld (Score), a    
 initVariables
     ld bc,56
 	ld de,blankText
@@ -156,15 +159,20 @@ initVariables
     xor a
     ld (playerColPosition), a
     
+    call filePlayArea
     call initialiseMaze
-    
-    ld a, 0
+
+    xor a
     ld (firstTime), a
     
+    ld a, (Score)
+    dec a
+    daa
+    ld (Score), a
 gameLoop    
     ld a, (firstTime)
     cp 1
-    jp z, initVariables
+    jp z, firstTimeInit
 
     ;; read keys
     ld a, KEYBOARD_READ_PORT_SHIFT_TO_V			
@@ -220,6 +228,10 @@ drawDown
     ld a, (playerRowPosition)
     inc a
     ld (playerRowPosition), a
+    ld a, (Score)
+    inc a
+    daa 
+    ld (Score),a 
     jp checkCollision
 
 checkCollision
@@ -229,8 +241,30 @@ checkCollision
     cp MAZE_CHARACTER
     jp z, hitGameOver 
     ld a, (playerRowPosition)
-    cp 20
+    cp 21
     jp z, playerWon    
+    
+    ld hl, (DF_CC)
+    ;ld de, 237
+    ld de, 248
+    add hl, de  
+    ld a, (Score)
+    
+
+    push af ;store the original value of a for later
+    and $f0 ; isolate the first digit
+    rra
+    rra
+    rra
+    rra
+    add a,$1c ; add 28 to the character code
+    ld (hl), a
+    inc hl
+    pop af ; retrieve original value of a
+    and $0f ; isolate the second digit
+    add a,$1c ; add 28 to the character code
+    ld (hl), a      
+    
     jp drawPlayer    
     
 erasePlayer
@@ -252,9 +286,11 @@ hitGameOver
     ld hl, (playerPosAbsolute)
     ld (hl), a
 
-	ld bc,56
-	ld de,youLostText
+	ld bc,57
+	ld de,youLostText    
     call printstring
+    ld a, 1
+    ld (Score), a   
     
 #ifdef RUN_ON_EMULATOR
     ld e, 20 
@@ -274,7 +310,7 @@ playerWon
     ld hl, (playerPosAbsolute)
     ld (hl), a
 
-	ld bc,56
+	ld bc,57
 	ld de,youWonText
 	call printstring   
     
@@ -290,46 +326,108 @@ waitPlayerWon
     
     jp initVariables
     ;; never gets to here
+
+filePlayArea
+    ld hl, (DF_CC)
+    ld de, 22
+    add hl, de  
+    ld b, 19    ;; loop for 20 rows
+outerFilePlayArea                          ; generate random number for col    
+    push bc
+    ld b, 10
+innerFilePlayArea     
+    ld a, MAZE_CHARACTER         ; set block
+    ld (hl), a
+    inc hl    
+    djnz innerFilePlayArea
     
+    inc hl      ; this extra inc to get past the end of line 
+    pop bc
+    djnz outerFilePlayArea
+    ret 
+ 
     
 initialiseMaze    
 
     ld hl, (DF_CC)
-    ld de, 22
+    ld de, 23
     add hl, de
     
     ld b, 19    ;; loop for 20 rows
     
 loopForRowsMazeInit                          ; generate random number for col    
     push bc
-    ld b, 10
+    ld b, 8
 loopForColMazeInit
     push bc
-    ld b, 3
+    ld b, 4
     call rnd    
     cp 1
-    jp z, addBlock
-    
+    jp z, clearBlockNorth   
     cp 2
-    jp z, clearBlock    
+    jp z, clearBlockSouth    
     cp 3
-    jp z, clearBlock        
+    jp z, clearBlockEast        
+    cp 4
+    jp z, clearBlockWest    
+    ;cp 5
+    ;jp z, clearBlockCurrent
+    ;; should never get here
     jp nextInnerLoopMazeInit
-clearBlock    
-    ld a, 0         ; clear block
+
+clearBlockNorth
+    push hl
+    ld de, 11
+    ld hl, (DF_CC)
+    sbc hl, de    
+    ld a, 136         ; clear block    
+    ld (hl), a
+    pop hl
+    jp nextInnerLoopMazeInit
+    
+clearBlockSouth
+    push hl
+    ld de, 11
+    ld hl, (DF_CC)
+    add hl, de    
+    ld a, 136         ; clear block    
+    ld (hl), a
+    pop hl
+    
+    ld a, 136         ; clear block 
     ld (hl), a
     jp nextInnerLoopMazeInit
-addBlock
-    ld a, MAZE_CHARACTER
+clearBlockEast    
+    push hl
+    dec hl
+    ld a, 136         ; clear block    
     ld (hl), a
+    pop hl
+    jp nextInnerLoopMazeInit
+clearBlockWest
+    push hl
+    inc hl
+    ld a, 136         ; clear block    
+    ld (hl), a
+    pop hl
+    ld a, 136         ; clear block 
+    ld (hl), a    
+    jp nextInnerLoopMazeInit
+
 nextInnerLoopMazeInit
+
+;clearBlockCurrent    
+;    ld a, 33         ; clear block    
+;    ld (hl), a
+    
     inc hl
     
     pop bc
     djnz loopForColMazeInit
     
     inc hl      ; this extra inc to get past the end of line
-       
+    inc hl
+    inc hl   
     pop bc
     
     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -342,9 +440,9 @@ nextInnerLoopMazeInit
     
 waitLoop
 #ifdef RUN_ON_EMULATOR
-    ld bc, $1acf     ; set wait loop delay for emulator
+    ld bc, $1fff     ; set wait loop delay for emulator
 #else
-    ld bc, $0acf     ; set wait loop delay 
+    ld bc, $0fff     ; set wait loop delay 
 #endif    
 waitloop1
     dec bc
@@ -428,7 +526,7 @@ Display        	DEFB $76
                 DEFB 0,0,0,0,0,0,0,0,0,0,$76  ; Line 19
                 DEFB 0,0,0,0,0,0,0,0,0,0,$76 ; Line 20
                 DEFB 9,9,9,9,0,0,9,9,9,9,$76  ; Line 21
-                DEFB $76 ; Line 22
+                DEFB _S,_C,_O,_R,_E,0,0,0,$76  ; Line 22
                 DEFB $76 ; Line 23
                                  
                                                                 
@@ -455,6 +553,8 @@ lastCharFirstRow
     DEFB 0,0
 firstTime    
     DEFB 1
+Score    
+    DEFB 0
 VariablesEnd:   DEFB $80
 BasicEnd: 
 #END
