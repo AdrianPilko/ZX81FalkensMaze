@@ -1,6 +1,5 @@
 ;;; Falkens Maze game for zx81, can run in 1k ram
-;;; by Adrian Pilkington March 2023, (byteforever)
-;;; https://youtube.com/@byteforever7829
+;;; by Adrian Pilkington March 2023
 
 ;; game title inspired by the film Wargames (1983)
 ;; "A strange game. The only winning move is not to play"
