@@ -504,7 +504,9 @@ printstring_loop
 printstring_end	
     ret  
 
-;;;adapted from file:///C:/Users/computer/Downloads/Game_52%20Weedkiller%20(4).pdf
+;;;adapted from game weedkiller found on
+;;; https://sinclairzxworld.com/viewtopic.php?t=552&start=120
+
 rnd     
     push hl
     push bc
